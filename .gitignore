@@ -1,0 +1,17 @@
+# Credential files — never commit these
+.env
+secrets.json
+config.local.js
+config.local.gs
+
+# Files containing real API keys or personal info
+*credentials*
+*private*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+*.swp
