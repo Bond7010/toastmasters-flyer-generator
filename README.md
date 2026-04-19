@@ -103,6 +103,10 @@ You'll provide these element IDs to Claude in your Claude Project's skill file (
 
 ### Step 4 — Set Up Your Claude Project
 
+This repository uses the dedicated Claude Project at:
+**[https://claude.ai/project/019d9978-1589-7749-8a63-25b4642b4429](https://claude.ai/project/019d9978-1589-7749-8a63-25b4642b4429)**
+
+If you're setting up your own copy:
 1. Go to [claude.ai](https://claude.ai) and create a new **Project**
 2. Add the Canva connector to the project (Settings → Integrations → Canva)
 3. Upload a skill file to the project with instructions for generating flyers, including:
@@ -132,7 +136,7 @@ const CONFIG = {
   CLAUDE_API_KEY:     "sk-ant-YOUR_KEY_HERE",
   CANVA_TEMPLATE_ID:  "YOUR_CANVA_TEMPLATE_ID",
   SHEET_ID:           "YOUR_GOOGLE_SHEET_ID",
-  CLAUDE_PROJECT_URL: "https://claude.ai/project/YOUR_PROJECT_ID",
+  CLAUDE_PROJECT_URL: "https://claude.ai/project/019d9978-1589-7749-8a63-25b4642b4429",
 
   DEFAULTS: {
     time:        "7:00 - 8:30pm PT",              // your club's usual meeting time
