@@ -1,9 +1,10 @@
 /**
  * ============================================================
  * TOASTMASTERS FLYER GENERATOR — Google Apps Script
+ * Enthusiastic Embarkers Club #4039
  * ============================================================
  * HOW IT WORKS:
- * 1. You forward the VPE's meeting email to your Gmail
+ * 1. You forward the VPE's meeting email to xdongwang52@gmail.com
  *    and type "make a meeting flyer" as the very first line
  * 2. This script detects the forwarded email (runs every 15 min)
  * 3. Claude API extracts date, theme, speaker FIRST NAMES from email
@@ -19,50 +20,50 @@
 const CONFIG = {
 
   // Gmail that receives your forwarded emails
-  TRIGGER_GMAIL: "YOUR_GMAIL@gmail.com",
+  TRIGGER_GMAIL: "xdongwang52@gmail.com",
 
   // Trigger config — script ONLY runs when:
   //   1. Email is FROM your Hotmail (you forwarding VPE email), AND
   //   2. The FIRST LINE of the email body contains "make a meeting flyer"
   //      (punctuation like "make a meeting flyer." is fine — it's ignored)
-  HOTMAIL_ADDRESS: "YOUR_HOTMAIL@hotmail.com",
+  HOTMAIL_ADDRESS: "redtrees2004@hotmail.com",
   TRIGGER_PHRASE: "make a meeting flyer",
 
   // Where to send the ready-to-paste notification
-  NOTIFY_EMAIL: "YOUR_NOTIFY_EMAIL@hotmail.com",
+  NOTIFY_EMAIL: "redtrees2004@hotmail.com",
 
   // Claude API key — get from console.anthropic.com
   CLAUDE_API_KEY: "sk-ant-YOUR_KEY_HERE",
 
-  // Fixed Canva template ID — copy from your template's URL
-  // URL: canva.com/design/[THIS PART]/edit
-  CANVA_TEMPLATE_ID: "YOUR_CANVA_TEMPLATE_ID",
+  // Fixed Canva template ID — never change
+  CANVA_TEMPLATE_ID: "DAHHD3cPQl0",
 
   // Canva MCP server URL — do not change
   CANVA_MCP_URL: "https://mcp.canva.com/mcp",
 
-  // Google Sheet ID — copy from your sheet's URL
-  // URL: docs.google.com/spreadsheets/d/[THIS PART]/edit
-  SHEET_ID: "YOUR_GOOGLE_SHEET_ID",
+  // Google Sheet ID
+  SHEET_ID: "16cELM-a2GMDajc5Kqg55gtK1vreMfect1_pFEV8FMew",
   SHEET_TAB: "Members",
+
+  // Google Drive folder containing member photos
+  // Photos must be named First-Last: Jordan-Thomas.jpg, Fasi-Shariff.png, etc.
+  // Use PHOTOS_FOLDER_ID (from Drive URL) for reliability — falls back to name lookup
+  PHOTOS_FOLDER_NAME: "MemberPhotos",
+  PHOTOS_FOLDER_ID:   "1vfo7rT_dUsIOfCYjeOwXkRDfCHbRno1q",
 
   // Default values — used when email doesn't mention them
   DEFAULTS: {
     time:        "7:00 - 8:30pm PT",
-    location:    "YOUR_MEETING_ADDRESS\nOr on Zoom",
-    club_name:   "YOUR_CLUB_NAME #XXXX (Est. YYYY)",
-    social_link: "YOURCLUB.toastmastersclubs.org",
+    location:    "2600 S. Main St Corona CA\nOr on Zoom",
+    club_name:   "Enthusiastic Embarkers Club #4039 (Est. 1979)",
+    social_link: "4039.toastmastersclubs.org",
   },
 
-  // Generic fallback portraits when no photo available
-  FALLBACKS: {
-    male:    "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=400&fit=crop&crop=face",
-    female:  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=face",
-    neutral: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
-  },
+  // Generic fallback portrait used when a member has no photo in the sheet
+  FALLBACK_PHOTO: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face",
 
-  // Claude Project URL — copy from your Claude Project's URL bar
-  CLAUDE_PROJECT_URL: "https://claude.ai/project/YOUR_PROJECT_ID",
+  // Claude Project URL
+  CLAUDE_PROJECT_URL: "https://bit.ly/3ORPJbF",
 };
 
 
@@ -139,14 +140,17 @@ function runFlyerPipeline(subject, body) {
   Logger.log("Step 2: Looking up speakers...");
   const firstNames = [info.speaker1, info.speaker2, info.speaker3];
   const speakers = firstNames.map((name, i) => {
-    if (!name) return { fullName: `Speaker ${i+1} TBA`, photoUrl: "", gender: "neutral" };
+    if (!name) return { fullName: `Speaker ${i+1} TBA`, photoUrl: "" };
     const found = lookupByFirstName(name);
     if (found) {
       Logger.log(`Found: ${name} → ${found.fullName}`);
-      return found;
+      return {
+        fullName: found.fullName,
+        photoUrl: found.photoUrl || "",
+      };
     }
     Logger.log(`Not found in sheet: ${name}`);
-    return { fullName: name, photoUrl: "", gender: "neutral" };
+    return { fullName: name, photoUrl: "" };
   });
 
   // Step 4: Build ready-to-paste Claude Project message
@@ -249,7 +253,6 @@ function lookupByFirstName(firstName) {
     first:  headers.indexOf("First Name"),
     full:   headers.indexOf("Full Name"),
     photo:  headers.indexOf("Photo URL"),
-    gender: headers.indexOf("Gender"),
   };
 
   const search = firstName.toLowerCase().trim();
@@ -257,9 +260,8 @@ function lookupByFirstName(firstName) {
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][col.first]).toLowerCase().trim() === search) {
       return {
-        fullName: rows[i][col.full]   || firstName,
-        photoUrl: rows[i][col.photo]  || "",
-        gender:   rows[i][col.gender] || "neutral",
+        fullName: rows[i][col.full]  || firstName,
+        photoUrl: rows[i][col.photo] || "",
       };
     }
   }
@@ -272,19 +274,22 @@ function lookupByFirstName(firstName) {
 // ─────────────────────────────────────────────────────────────
 function sendFlyerMessage(meeting, flyerMessage) {
   const subject = "🎤 Paste this into Claude to generate your flyer — " + meeting.date;
-  const body = "Hi,\n\n"
-    + "Your meeting details are ready. Follow these steps:\n\n"
-    + "1. Open your Claude Project:\n"
-    + "   " + CONFIG.CLAUDE_PROJECT_URL + "\n\n"
-    + "2. Paste the message below into the chat and press Enter:\n\n"
-    + "─────────────────────────────────\n"
-    + flyerMessage + "\n"
-    + "─────────────────────────────────\n\n"
-    + "3. Claude will generate your flyer automatically.\n"
-    + "4. Approve the preview → get the Canva link → download PNG.\n\n"
-    + "— Toastmasters Flyer Bot";
 
-  GmailApp.sendEmail(CONFIG.NOTIFY_EMAIL, subject, body);
+  const flyerHtml = flyerMessage.split("\n").join("<br>");
+
+  const htmlBody = "<p>Your meeting details are ready. Follow these steps:</p>"
+    + "<ol>"
+    + "<li><a href='" + CONFIG.CLAUDE_PROJECT_URL + "'>Open your Claude Project</a></li>"
+    + "<li>Paste the message below into the chat and press Enter:</li>"
+    + "</ol>"
+    + "<pre style='background:#f4f4f4;padding:12px;border-radius:4px;font-size:14px'>" + flyerMessage + "</pre>"
+    + "<ol start='3'>"
+    + "<li>Claude will generate your flyer automatically.</li>"
+    + "<li>Approve the preview → get the Canva link → download PNG.</li>"
+    + "</ol>"
+    + "<p>— Toastmasters Flyer Bot</p>";
+
+  GmailApp.sendEmail(CONFIG.NOTIFY_EMAIL, subject, "", { htmlBody: htmlBody });
   Logger.log("Message sent to " + CONFIG.NOTIFY_EMAIL);
 }
 
@@ -298,6 +303,290 @@ function notifyError(message) {
     "⚠️ Flyer Bot Error — Please generate manually",
     `The flyer bot ran into a problem:\n\n${message}\n\nPlease generate this week's flyer manually in your Claude Project.`
   );
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// MEMBER PHOTOS: Sync Drive folder → update Members sheet
+// Run manually (or set a weekly trigger) when photos change.
+// Photos must be named by first name: Jordan.jpg, Fasi.png, etc.
+// ─────────────────────────────────────────────────────────────
+function syncMemberPhotos() {
+  const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "heic"];
+
+  // Step 1: Open the Google Drive folder
+  // Prefers PHOTOS_FOLDER_ID (more reliable); falls back to name search
+  let folder;
+  try {
+    if (CONFIG.PHOTOS_FOLDER_ID && CONFIG.PHOTOS_FOLDER_ID !== "YOUR_DRIVE_FOLDER_ID") {
+      folder = DriveApp.getFolderById(CONFIG.PHOTOS_FOLDER_ID);
+    } else {
+      const iter = DriveApp.getFoldersByName(CONFIG.PHOTOS_FOLDER_NAME);
+      if (!iter.hasNext()) {
+        throw new Error(`Drive folder "${CONFIG.PHOTOS_FOLDER_NAME}" not found. Check PHOTOS_FOLDER_NAME or set PHOTOS_FOLDER_ID.`);
+      }
+      folder = iter.next();
+    }
+  } catch (err) {
+    throw new Error(`Could not open photos folder: ${err.message}`);
+  }
+  Logger.log(`Opened folder: ${folder.getName()}`);
+
+  // Step 2: Open the Members sheet
+  const sheet = SpreadsheetApp
+    .openById(CONFIG.SHEET_ID)
+    .getSheetByName(CONFIG.SHEET_TAB);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const col = {
+    first: headers.indexOf("First Name"),
+    full:  headers.indexOf("Full Name"),
+    photo: headers.indexOf("Photo URL"),
+  };
+
+  // Step 3: Process each file in the folder
+  const files = folder.getFiles();
+  let updated = 0, added = 0, skipped = 0, errors = 0;
+
+  while (files.hasNext()) {
+    const file  = files.next();
+    const fileName = file.getName();
+    const ext   = fileName.split(".").pop().toLowerCase();
+
+    // Skip non-image files (.pdf, .docx, etc.)
+    if (!IMAGE_EXTENSIONS.includes(ext)) {
+      Logger.log(`Skipping non-image: ${fileName}`);
+      skipped++;
+      continue;
+    }
+
+    // Parse "Jordan-Thomas.jpg" → firstName = "Jordan", fullName = "Jordan Thomas"
+    const baseName  = fileName.substring(0, fileName.lastIndexOf(".")).trim();
+    const nameParts = baseName.split("-");
+    const firstName = nameParts[0].trim();
+    const fullName  = nameParts.map(p => p.trim()).join(" ");
+
+    // Make file publicly readable so Claude/Canva can fetch it
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (err) {
+      Logger.log(`WARNING: Could not set sharing for ${fileName}: ${err.message}`);
+      errors++;
+      continue;
+    }
+
+    const photoUrl = file.getUrl();
+
+    // Find matching row in sheet (case-insensitive first name)
+    const search = firstName.toLowerCase();
+    let matchRow   = -1;
+    let matchCount = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][col.first]).toLowerCase().trim() === search) {
+        matchCount++;
+        if (matchRow === -1) matchRow = i;
+      }
+    }
+
+    if (matchCount > 1) {
+      // Duplicate names are unusual — warn and update only the first match
+      Logger.log(`WARNING: Duplicate first name "${firstName}" (${matchCount} rows). Updating row ${matchRow + 1} only.`);
+    }
+
+    if (matchRow !== -1) {
+      // Update existing member's Photo URL
+      sheet.getRange(matchRow + 1, col.photo + 1).setValue(photoUrl);
+      rows[matchRow][col.photo] = photoUrl; // keep local array in sync
+      Logger.log(`Updated photo for: ${firstName}`);
+      updated++;
+    } else {
+      // New member — add a placeholder row for the VPPR to complete
+      const newRow = new Array(headers.length).fill("");
+      newRow[col.first] = firstName;
+      newRow[col.full]  = fullName;  // parsed from filename: "Jordan-Thomas" → "Jordan Thomas"
+      newRow[col.photo] = photoUrl;
+      sheet.appendRow(newRow);
+      rows.push(newRow); // keep local array in sync
+      Logger.log(`Added new row for: ${firstName} (${fullName}) — no further action needed`);
+      added++;
+    }
+  }
+
+  Logger.log(`=== syncMemberPhotos done: ${updated} updated, ${added} added, ${skipped} skipped, ${errors} errors ===`);
+
+  // Step 4: Clear sheet URLs for photos that no longer exist in the folder
+  clearDeletedPhotos();
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// TEST: Preview syncMemberPhotos() without writing to sheet
+// Run this first to confirm the results look right
+// ─────────────────────────────────────────────────────────────
+function testSyncMemberPhotos() {
+  const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "heic"];
+  Logger.log("=== DRY RUN — no changes will be made to the sheet ===");
+
+  // Open folder
+  let folder;
+  if (CONFIG.PHOTOS_FOLDER_ID && CONFIG.PHOTOS_FOLDER_ID !== "YOUR_DRIVE_FOLDER_ID") {
+    folder = DriveApp.getFolderById(CONFIG.PHOTOS_FOLDER_ID);
+  } else {
+    const iter = DriveApp.getFoldersByName(CONFIG.PHOTOS_FOLDER_NAME);
+    if (!iter.hasNext()) {
+      Logger.log(`ERROR: Drive folder "${CONFIG.PHOTOS_FOLDER_NAME}" not found.`);
+      return;
+    }
+    folder = iter.next();
+  }
+  Logger.log(`Folder found: ${folder.getName()}`);
+
+  // Read sheet
+  const sheet = SpreadsheetApp
+    .openById(CONFIG.SHEET_ID)
+    .getSheetByName(CONFIG.SHEET_TAB);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const col = { first: headers.indexOf("First Name") };
+
+  // Report what syncMemberPhotos() would do for each file
+  const files = folder.getFiles();
+  while (files.hasNext()) {
+    const file     = files.next();
+    const fileName = file.getName();
+    const ext      = fileName.split(".").pop().toLowerCase();
+
+    if (!IMAGE_EXTENSIONS.includes(ext)) {
+      Logger.log(`[SKIP]        ${fileName} — not an image`);
+      continue;
+    }
+
+    const baseName2  = fileName.substring(0, fileName.lastIndexOf(".")).trim();
+    const firstName  = baseName2.split("-")[0].trim();
+    const fullName2  = baseName2.split("-").map(p => p.trim()).join(" ");
+    const search     = firstName.toLowerCase();
+    let matchRow     = -1;
+    let matchCount   = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][col.first]).toLowerCase().trim() === search) {
+        matchCount++;
+        if (matchRow === -1) matchRow = i;
+      }
+    }
+
+    if (matchRow !== -1) {
+      const dupeNote = matchCount > 1 ? ` — WARNING: ${matchCount} duplicate rows, would update row ${matchRow + 1} only` : ` → row ${matchRow + 1}`;
+      Logger.log(`[WOULD UPDATE] ${firstName}${dupeNote}`);
+    } else {
+      Logger.log(`[WOULD ADD]   ${firstName} (${fullName2}) — new row, fully populated from filename`);
+    }
+  }
+
+  Logger.log("=== Dry run complete. Run syncMemberPhotos() to apply changes. ===");
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// MEMBER PHOTOS: Clear sheet URLs for deleted photos
+// Called automatically at the end of syncMemberPhotos()
+// Only clears URLs that point to files in the MemberPhotos folder
+// ─────────────────────────────────────────────────────────────
+function clearDeletedPhotos() {
+  // Build a set of file IDs currently in the Drive folder
+  let folder;
+  if (CONFIG.PHOTOS_FOLDER_ID && CONFIG.PHOTOS_FOLDER_ID !== "YOUR_DRIVE_FOLDER_ID") {
+    folder = DriveApp.getFolderById(CONFIG.PHOTOS_FOLDER_ID);
+  } else {
+    const iter = DriveApp.getFoldersByName(CONFIG.PHOTOS_FOLDER_NAME);
+    if (!iter.hasNext()) {
+      Logger.log("clearDeletedPhotos: folder not found, skipping.");
+      return;
+    }
+    folder = iter.next();
+  }
+
+  const existingIds = new Set();
+  const files = folder.getFiles();
+  while (files.hasNext()) existingIds.add(files.next().getId());
+
+  // Scan the sheet for Drive URLs whose file no longer exists in the folder
+  const sheet = SpreadsheetApp
+    .openById(CONFIG.SHEET_ID)
+    .getSheetByName(CONFIG.SHEET_TAB);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const col = {
+    first: headers.indexOf("First Name"),
+    photo: headers.indexOf("Photo URL"),
+  };
+
+  let cleared = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const url = String(rows[i][col.photo] || "").trim();
+    if (!url) continue;
+
+    // Extract file ID from Drive URL: drive.google.com/file/d/FILE_ID/view
+    const match = url.match(/\/d\/([^\/\?]+)/);
+    if (!match) continue; // not a Drive URL — leave it alone
+
+    const fileId = match[1];
+    if (!existingIds.has(fileId)) {
+      sheet.getRange(i + 1, col.photo + 1).setValue("");
+      Logger.log(`Cleared stale photo URL for: ${rows[i][col.first]}`);
+      cleared++;
+    }
+  }
+
+  Logger.log(`=== clearDeletedPhotos done: ${cleared} URL(s) cleared ===`);
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// TEST: Preview clearDeletedPhotos() without writing to sheet
+// ─────────────────────────────────────────────────────────────
+function testClearDeletedPhotos() {
+  Logger.log("=== DRY RUN — no changes will be made to the sheet ===");
+
+  let folder;
+  if (CONFIG.PHOTOS_FOLDER_ID && CONFIG.PHOTOS_FOLDER_ID !== "YOUR_DRIVE_FOLDER_ID") {
+    folder = DriveApp.getFolderById(CONFIG.PHOTOS_FOLDER_ID);
+  } else {
+    const iter = DriveApp.getFoldersByName(CONFIG.PHOTOS_FOLDER_NAME);
+    if (!iter.hasNext()) {
+      Logger.log("ERROR: folder not found.");
+      return;
+    }
+    folder = iter.next();
+  }
+
+  const existingIds = new Set();
+  const files = folder.getFiles();
+  while (files.hasNext()) existingIds.add(files.next().getId());
+  Logger.log(`Files currently in folder: ${existingIds.size}`);
+
+  const sheet = SpreadsheetApp
+    .openById(CONFIG.SHEET_ID)
+    .getSheetByName(CONFIG.SHEET_TAB);
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  const col = {
+    first: headers.indexOf("First Name"),
+    photo: headers.indexOf("Photo URL"),
+  };
+
+  for (let i = 1; i < rows.length; i++) {
+    const url = String(rows[i][col.photo] || "").trim();
+    if (!url) continue;
+    const match = url.match(/\/d\/([^\/\?]+)/);
+    if (!match) continue;
+    if (!existingIds.has(match[1])) {
+      Logger.log(`[WOULD CLEAR] ${rows[i][col.first]} — file no longer in folder`);
+    }
+  }
+
+  Logger.log("=== Dry run complete. Run clearDeletedPhotos() to apply. ===");
 }
 
 

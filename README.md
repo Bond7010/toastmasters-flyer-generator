@@ -73,17 +73,16 @@ You'll provide these element IDs to Claude in your Claude Project's skill file (
 2. Name the first tab **Members** (exact spelling matters)
 3. Add these column headers in row 1 (exact spelling matters):
 
-| First Name | Full Name | Photo URL | Gender |
-|---|---|---|---|
-| Jordan | Jordan Thomas | https://drive.google.com/file/d/FILE_ID/view | neutral |
-| Alex | Alex Rivera | https://drive.google.com/file/d/FILE_ID/view | female |
-| Sam | Sam Patel | | male |
+| First Name | Full Name | Photo URL |
+|---|---|---|
+| Jordan | Jordan Thomas | https://drive.google.com/file/d/FILE_ID/view |
+| Alex | Alex Rivera | https://drive.google.com/file/d/FILE_ID/view |
+| Sam | Sam Patel | |
 
 **Notes:**
 - **First Name** — must exactly match how the VPE writes names in meeting emails
 - **Photo URL** — use a Google Drive sharing link (`Anyone with the link can view`). Leave blank to use a generic portrait fallback.
-- **Gender** — `male`, `female`, or `neutral` — used to select the right fallback portrait when no photo is available
-- The script auto-converts Drive share URLs to direct image URLs
+- `syncMemberPhotos()` populates all three columns automatically from the photo filename — no manual entry needed
 
 4. Copy the **Sheet ID** from the URL:
    ```
@@ -156,16 +155,24 @@ const CONFIG = {
 2. Click **Run**
 3. Follow the Google authorization prompts (you'll need to approve Gmail and Sheets access)
 
-#### Set Up the 15-Minute Trigger
+#### Set Up the 15-Minute Triggers
+
+You need two triggers — one for flyer generation, one for photo sync. Add them both the same way:
 
 1. In the script editor, click **Triggers** (clock icon in the left sidebar)
-2. Click **+ Add Trigger**
-3. Set:
+2. Click **+ Add Trigger** and set:
    - Function: `checkForForwardedEmail`
    - Event source: Time-driven
    - Type: Minutes timer
    - Interval: Every 15 minutes
+3. Click **Save**, then click **+ Add Trigger** again and set:
+   - Function: `syncMemberPhotos`
+   - Event source: Time-driven
+   - Type: Minutes timer
+   - Interval: Every 15 minutes
 4. Click **Save**
+
+After this, dropping a photo into your local `MemberPhotos` folder will automatically update the Members sheet within 15 minutes — no manual action needed.
 
 ---
 
@@ -235,6 +242,70 @@ Use these in your Canva template to stay on-brand:
 | Happy Yellow | `#F2DF74` |
 
 **Fonts:** Montserrat (headlines), Source Sans 3 (body)
+
+---
+
+## Keeping Member Photos Updated
+
+When a new member joins or an existing member updates their photo, run `syncMemberPhotos()` to sync your local photo folder to Google Drive and update the Members sheet automatically.
+
+### One-Time Setup
+
+1. **Install [Google Drive for Desktop](https://drive.google.com/drive/download)**
+2. Create a local folder — e.g. `C:\Toastmasters\MemberPhotos\`
+3. In Drive for Desktop, set that folder to sync to Google Drive.
+   This creates a matching `MemberPhotos` folder in your Drive automatically.
+4. **Get the folder ID** from Google Drive:
+   - Open Google Drive → navigate to `MemberPhotos`
+   - Copy the ID from the URL: `drive.google.com/drive/folders/`**`THIS_IS_THE_ID`**
+5. Paste that ID into `CONFIG.PHOTOS_FOLDER_ID` in `Code.gs`
+
+### Photo Naming Convention
+
+Name each photo file as **First-Last** (hyphen-separated), matching the member's name in the sheet:
+
+```
+Jordan-Thomas.jpg
+Fasi-Shariff.png
+Kristina-McVeigh.jpg
+```
+
+The script parses the filename automatically:
+- `Jordan-Thomas.jpg` → First Name: `Jordan`, Full Name: `Jordan Thomas`
+- The **First Name** is the lookup key (matches how the VPE writes names in meeting emails)
+- For new members, both First Name and Full Name are populated from the filename — only **Gender** needs to be filled in manually
+
+### How It Works (Automatic)
+
+Once the 15-minute trigger is set up (see Step 5), the full flow is automatic:
+
+1. Drop a photo (e.g. `Rocio-Galeano.jpg`) into your local `MemberPhotos` folder
+2. Google Drive for Desktop syncs it to Drive (within ~1 minute)
+3. `syncMemberPhotos()` runs automatically every 15 minutes and updates the Members sheet
+
+**That's it — no manual steps after the initial setup.**
+
+The script will:
+- Make each photo publicly readable (required for Canva/Claude to fetch it)
+- Update the Photo URL in the Members sheet for existing members
+- Add a fully populated row for new members (First Name, Full Name, and Photo URL all set from the filename)
+
+### First-Time / Manual Run
+
+To test before the trigger fires, or to force an immediate update:
+
+1. Open [script.google.com](https://script.google.com) → Toastmasters Flyer Bot
+2. Select `testSyncMemberPhotos` and click **Run** — check the logs to confirm results
+3. Select `syncMemberPhotos` and click **Run** to apply
+
+### Optional: Weekly Automatic Trigger
+
+To run `syncMemberPhotos()` automatically every Monday morning:
+
+1. In Apps Script, click **Triggers** (clock icon in sidebar)
+2. Click **+ Add Trigger**
+3. Set: Function = `syncMemberPhotos`, Event source = Time-driven, Type = Week timer, Day = Every Monday, Time = 6am–7am
+4. Click **Save**
 
 ---
 
